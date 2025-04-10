@@ -80,7 +80,7 @@ A simple and stylish desktop GUI application built with Python and PySide6 to co
 ## ▶️ Usage
 
 1.  Make sure you have activated your virtual environment (if you created one).
-2.  Navigate to the directory containing the script (e.g., `app.py`, `main.py`).
+2.  Navigate to the directory containing the script.
 3.  Run the application from your terminal:
 
     ```bash

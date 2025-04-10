@@ -84,9 +84,8 @@ A simple and stylish desktop GUI application built with Python and PySide6 to co
 3.  Run the application from your terminal:
 
     ```bash
-    python your_script_name.py
+    python docling_gui.py
     ```
-    *(Replace `your_script_name.py` with the actual name of the Python file)*
 
 4.  Use the "📂 Open Document or HTML File" button or drag and drop a supported file onto the window.
 5.  The converted Markdown will appear in the text area.

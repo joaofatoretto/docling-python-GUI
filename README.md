@@ -5,9 +5,9 @@
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![GUI Framework](https://img.shields.io/badge/GUI-PySide6-brightgreen.svg)](https://doc.qt.io/qtforpython/)
 [![Theme](https://img.shields.io/badge/Theme-QDarkStyle-blueviolet)](https://github.com/ColinDuquesnoy/QDarkStyleSheet)
-[![Converter](https://img.shields.io/badge/Converter-langchain--docling-orange)](https://github.com/docling-ai/langchain-docling)
+[![Converter](https://img.shields.io/badge/Converter-docling-orange)](https://github.com/docling-project/docling)
 
-A simple and stylish desktop GUI application built with Python and PySide6 to convert various document formats (.pdf, .docx, .pptx, .html) into Markdown using the power of [`langchain-docling`](https://github.com/docling-ai/langchain-docling).
+A simple and stylish desktop GUI application built with Python and PySide6 to convert various document formats (.pdf, .docx, .pptx, .html) into Markdown using the power of [Docling](https://github.com/docling-project/docling).
 
 ---
 
@@ -23,6 +23,7 @@ A simple and stylish desktop GUI application built with Python and PySide6 to co
 * M↓ **Markdown Output:** View the converted Markdown content directly within the application's text area.
 * 📋 **Copy to Clipboard:** Easily copy the generated Markdown with a single button click.
 * 🎨 **Dark Theme:** Features a pleasant dark user interface powered by QDarkStyle.
+* ⚡ **Fast Startup:** The window opens and accepts files instantly; Docling loads in the background (see [Performance](#-performance)).
 * ⏳ **Status Updates:** Provides feedback on the conversion process (Ready, Converting, Success, Error).
 * 🛠️ **Platform Workarounds:** Includes built-in attempts to handle common issues like:
     * Hugging Face Hub symlink errors on Windows (`OSError [WinError 1314]`).
@@ -68,12 +69,11 @@ A simple and stylish desktop GUI application built with Python and PySide6 to co
     ```
 
 3.  **Install Dependencies:**
-    The application relies on several Python packages. Install them using pip:
     ```bash
-    pip install PySide6 qdarkstyle langchain-docling
+    pip install -r requirements.txt
     ```
-    * **Note:** `langchain-docling` may download additional models (from Hugging Face Hub) and dependencies the first time it's used for a specific file type. This might take some time and requires an internet connection.
-    * Depending on the specific document types you frequently convert and your environment, `langchain-docling` might suggest installing optional dependencies (e.g., `pip install langchain-docling[ocr]` for advanced PDF scanning). Check their documentation if you encounter issues with specific complex files.
+    * **Note:** On the very first launch, Docling downloads its PDF models (layout, tables, OCR) from Hugging Face Hub in the background. This happens once and requires an internet connection.
+    * If you install with `uv`, add `--compile-bytecode` (`uv pip install --compile-bytecode -r requirements.txt`). Otherwise Python compiles thousands of files on the first launch, which makes that launch noticeably slower.
 
 ---
 
@@ -93,10 +93,37 @@ A simple and stylish desktop GUI application built with Python and PySide6 to co
 
 ---
 
+## ⚡ Performance
+
+The slow part of this app is not the GUI: it is importing Docling (and PyTorch under it) and loading its PDF models. The app is built around that:
+
+* **Instant window.** Only Qt is imported before the window appears. You can pick or drop a file right away; it is queued and converts as soon as Docling is ready.
+* **Background loading.** Docling is imported in a background thread, then the PDF models are preloaded, so the first PDF does not pay for them. A file picked during loading is converted *before* the model preload.
+* **One converter per session.** Models are loaded once, not once per file.
+* **No LangChain.** The app calls Docling directly; `langchain-docling` added extra imports (chunking, tokenizers) the app never used. The Markdown output is identical.
+
+Measured on Linux (32 cores, SSD), same machine and documents, before → after:
+
+| | Before | After |
+|---|---|---|
+| Window can accept a file (cold cache) | 4.2 s | **0.25 s** |
+| First DOCX converted, picked at launch (cold cache) | 5.8 s | **3.9 s** |
+| First PDF converted, picked at launch | 7.7 s | **6.9 s** |
+| Each later PDF in the same session | 2.6 s | **1.2 s** |
+
+To see the timings on your own machine:
+
+```bash
+DOCUMARK_TIMING=1 python docling_gui.py          # macOS / Linux
+set DOCUMARK_TIMING=1 && python docling_gui.py   # Windows (cmd)
+```
+
+---
+
 ## Platform Notes
 
 * **Windows:**
-    * **Hugging Face Symlink Issue:** `langchain-docling` uses Hugging Face Hub for model management. On Windows, creating symbolic links (symlinks) often requires administrator privileges or enabling "Developer Mode". This can cause an `OSError: [WinError 1314] A required privilege is not held by the client` when models are downloaded/cached.
+    * **Hugging Face Symlink Issue:** Docling uses Hugging Face Hub for model management. On Windows, creating symbolic links (symlinks) often requires administrator privileges or enabling "Developer Mode". This can cause an `OSError: [WinError 1314] A required privilege is not held by the client` when models are downloaded/cached.
     * **Workaround:** This script *automatically* sets the environment variable `HF_HUB_DISABLE_SYMLINKS=1` before importing relevant libraries. This tells Hugging Face Hub to *copy* files instead of using symlinks, avoiding the privilege error. This might use slightly more disk space in the cache (`C:\Users\<YourUser>\.cache\huggingface`).
     * **If Errors Persist:** Although the script tries to prevent it, if you still see WinError 1314, try:
         * Enabling [Developer Mode](https://learn.microsoft.com/en-us/windows/apps/get-started/enable-your-device-for-development) in Windows Settings.
@@ -104,17 +131,17 @@ A simple and stylish desktop GUI application built with Python and PySide6 to co
         * Checking permissions on your Hugging Face cache directory.
 
 * **macOS:**
-    * **Drag and Drop:** Newer macOS versions have stricter sandboxing for drag-and-drop operations. This script includes a workaround using the `Foundation` library (if available) to correctly resolve file paths dropped onto the application.
+    * **Drag and Drop:** Newer macOS versions have stricter sandboxing for drag-and-drop operations. If Qt cannot resolve a dropped file, the app falls back to the `Foundation` library (pyobjc, if installed) to resolve the path.
 
 ---
 
 ## 🔧 Troubleshooting
 
-* **`ImportError: langchain-docling not found`:** Make sure you have installed the dependencies correctly using `pip install -r requirements.txt` (if you create one) or `pip install PySide6 qdarkstyle langchain-docling`. Ensure your virtual environment is active.
-* **`ImportError: No module named 'some_dependency'`:** `langchain-docling` might require extra libraries for specific file types that weren't installed automatically. Check the `langchain-docling` documentation or the specific error message for clues (e.g., you might need `pip install pypdf` or `pip install python-docx`).
+* **`ImportError: No module named 'docling'`:** Install the dependencies with `pip install -r requirements.txt` and make sure your virtual environment is active.
+* **`ImportError: No module named 'some_dependency'`:** Docling might require extra libraries for specific file types. Check the Docling documentation or the error message for clues.
 * **Conversion Fails / Empty Output:**
     * Ensure the input file is not corrupted or password-protected.
-    * The document might be empty or have content `langchain-docling` cannot parse (e.g., image-only PDF without OCR capabilities installed/enabled).
+    * The document might be empty or have content Docling cannot parse (e.g., image-only PDF without OCR capabilities installed/enabled).
     * Check the console for more detailed error messages printed by the script or underlying libraries.
 * **`OSError` / Permission Denied:** Ensure the application has read permissions for the file you are trying to open and write permissions for the Hugging Face cache directory. Check if the file is open in another application.
 * **Application Doesn't Start / `qdarkstyle` Error:** Ensure `qdarkstyle` and `PySide6` installed correctly. The application attempts to fall back to default styling if `qdarkstyle` fails to load.
@@ -125,8 +152,8 @@ A simple and stylish desktop GUI application built with Python and PySide6 to co
 
 * **PySide6:** Qt for Python bindings (GUI framework).
 * **qdarkstyle:** For the dark theme stylesheet.
-* **langchain-docling:** Handles the core document loading and conversion to Markdown.
-* **(Indirect) huggingface_hub:** Used by `langchain-docling` for model management.
+* **docling:** Handles the core document loading and conversion to Markdown.
+* **(Indirect) huggingface_hub:** Used by Docling for model management.
 
 ---
 
